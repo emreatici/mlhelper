@@ -1,3 +1,11 @@
 catboost
+xgboost
+lightgbm
+statsmodels
+torch
+ipywidgets
 optuna
 shap
+seaborn
+tabulate
+pandas

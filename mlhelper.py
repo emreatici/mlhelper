@@ -1,4 +1,4 @@
-from google.colab import drive
+#from google.colab import drive
 import pandas as pd
 import os
 import seaborn as sns
@@ -8,6 +8,7 @@ import scipy.stats as stats
 import numpy as np
 from tabulate import tabulate
 from IPython.display import display, HTML
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 
 import optuna
 from catboost import CatBoostClassifier
@@ -28,6 +29,13 @@ from catboost import CatBoostClassifier, CatBoostRegressor
 pd.set_option('display.max_rows', 500)
 pd.set_option('display.max_columns', 500)
 pd.set_option('display.width', 1000)
+
+# Global Variables
+numeric_cols = []
+categorical_cols = []
+object_cols = []
+datetime_cols = []
+boolean_cols = []
 
 def file_to_df(file_path):
     """
@@ -72,7 +80,6 @@ def first_look(df):
     # Yinelenen satırların sayısını gösterir
     print("\n### Yinelenen Satırların Toplamı:")
     display(df.duplicated().sum())
-
 
 
 def eda(df):
@@ -143,13 +150,6 @@ def eda(df):
 
 """### **Categorise Columns**"""
 
-# Global değişkenler tanımlıyoruz
-numeric_cols = []
-categorical_cols = []
-object_cols = []
-datetime_cols = []
-boolean_cols = []
-
 def categorize_columns(df):
     """
     Function to identify and categorize columns of a DataFrame by their data types.
@@ -177,7 +177,73 @@ def categorize_columns(df):
     # Returning the lists for further use
     #return numeric_cols, categorical_cols, object_cols, datetime_cols, boolean_cols
 
-"""### **Detect Outliers**"""
+
+def list_unique(df):
+
+    """
+    Lists unique values in every column of a DataFrame, excluding ID columns, sorted alphabetically (A to Z),
+    and displays them in a formatted manner where each column's unique values are listed separately.
+    
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        
+    Returns:
+        None: Prints formatted unique values for each column.
+    """
+    # Iterate over each column in the DataFrame
+    for col in df.columns:
+        # Check if the column is an ID column (all values are unique)
+        if df[col].nunique() == len(df[col]):
+            print(f"'{col}' column identified as ID column and excluded from listing.")
+            continue  # Skip ID columns
+        
+        # Get unique values from the column and sort them
+        unique_values = sorted(df[col].unique(), key=lambda x: str(x).lower())
+        
+        # Format the unique values as a comma-separated string
+        formatted_values = ', '.join(str(value) for value in unique_values)
+        
+        # Print the formatted output for the column
+        print(f"{col}: {formatted_values}")
+
+
+def bar_plots(df):
+    """
+    Creates a bar plot for each column in a DataFrame, excluding ID columns (columns with all unique values).
+    The plots are wide and aesthetically pleasing.
+    
+    Args:
+        df (pd.DataFrame): The input DataFrame.
+        
+    Returns:
+        None: Displays the bar plots for each non-ID column.
+    """
+    # Iterate over each column in the DataFrame
+    for col in df.columns:
+        # Check if the column is an ID column (all values are unique)
+        if df[col].nunique() == len(df[col]):
+            print(f"'{col}' column identified as ID column and excluded from plotting.")
+            continue  # Skip ID columns
+        
+        # Count the frequency of each unique value in the column
+        value_counts = df[col].value_counts().sort_index()
+        
+        # Create a bar plot for the column
+        plt.figure(figsize=(12, 6))  # Make the plot wide
+        value_counts.plot(kind='bar', color='skyblue', edgecolor='black')
+        
+        # Add title and labels
+        plt.title(f'Bar Plot for {col}', fontsize=16)
+        plt.xlabel(f'{col} Values', fontsize=14)
+        plt.ylabel('Frequency', fontsize=14)
+        plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels for better visibility
+        
+        # Improve layout
+        plt.tight_layout()
+        
+        # Display the plot
+        plt.show()
+
 
 def detect_outliers(df):
     outlier_indices = []
@@ -522,12 +588,8 @@ def detect_multicollinearity(df, threshold=5.0):
     print("Multicollinear Features and their VIF values:")
     print(multicollinear_features)
 
-"""### **Encoding**"""
 
-import pandas as pd
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
-
-def encode(df, columns, method='onehot'):
+def encode(df, columns, method='label'):
     """
     Encode specified columns of a DataFrame using One-Hot Encoding or Label Encoding.
 
@@ -547,7 +609,8 @@ def encode(df, columns, method='onehot'):
         for col in columns:
             print(f"One-Hot Encoding column: {col}")
             encoded_data = encoder.fit_transform(df_encoded[[col]])
-            df_encoded = df_encoded.join(pd.DataFrame(encoded_data, columns=encoder.get_feature_names_out([col])))
+            encoded_df = pd.DataFrame(encoded_data, columns=encoder.get_feature_names_out([col]), index=df_encoded.index)
+            df_encoded = df_encoded.join(encoded_df)
             df_encoded.drop(col, axis=1, inplace=True)
     elif method == 'label':
         encoder = LabelEncoder()
@@ -559,14 +622,6 @@ def encode(df, columns, method='onehot'):
 
     return df_encoded
 
-# Example usage
-# df = pd.read_csv('your_file.csv')
-# columns_to_encode = 'CategoricalColumn'  # Can be a single column name or a list of column names
-# df_encoded = encode_dataframe(df, columns_to_encode, method='onehot')
-
-"""### **Drop Columns**"""
-
-import pandas as pd
 
 def drop_columns(df, columns_to_drop):
     """
@@ -584,10 +639,6 @@ def drop_columns(df, columns_to_drop):
 
     return df.drop(columns=columns_to_drop, axis=1, inplace=True)
 
-# Example usage
-# df = pd.read_csv('your_file.csv')
-# columns_to_drop = 'column_name'  # Can be a single column name or a list of column names
-# df_dropped = drop_columns(df, columns_to_drop)
 
 """### **Drop Duplicates**"""
 
@@ -608,8 +659,7 @@ def drop_duplicates(df):
 
 """### **HYpothesis Testing**"""
 
-import pandas as pd
-from scipy import stats
+
 
 def hypothesis_test(df, column, group_column, group1, group2, alpha=0.05):
     """
@@ -648,6 +698,27 @@ def hypothesis_test(df, column, group_column, group1, group2, alpha=0.05):
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+
+def reduce_dataset(df, yuzde):
+    """
+    Reduces the size of the DataFrame by randomly selecting a percentage of rows.
+    
+    :param df: DataFrame to be reduced.
+    :param yuzde: Percentage of the dataset to keep (between 0 and 100).
+    :return: Reduced DataFrame containing the specified percentage of randomly selected rows.
+    """
+    if yuzde < 0 or yuzde > 100:
+        raise ValueError("Percentage (yuzde) must be between 0 and 100.")
+
+    # Calculate the fraction of the dataset to keep
+    fraction = yuzde / 100
+    
+    # Sample the DataFrame to get the specified percentage of rows
+    df_reduced = df.sample(frac=fraction, random_state=42)  # random_state is used for reproducibility
+
+    return df_reduced
+
+
 
 def split_data(df, test_size=0.2, validation_size=0.5, random_state=42):
     """
